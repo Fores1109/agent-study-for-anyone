@@ -227,130 +227,236 @@
   3. ```python
       import re
       import random
-
-
-      name=''
-      age=''
-      job=''
       
-      # 定义规则库:模式(正则表达式) -> 响应模板列表
-      rules = {
-          r'I need (.*)': [
-              "Why do you need {0}?",
-              "Would it really help you to get {0}?",
-              "Are you sure you need {0}?"
-          ],
-          r'Why don\'t you (.*)\?': [
-              "Do you really think I don't {0}?",
-              "Perhaps eventually I will {0}.",
-              "Do you really want me to {0}?"
-          ],
-          r'Why can\'t I (.*)\?': [
-              "Do you think you should be able to {0}?",
-              "If you could {0}, what would you do?",
-              "I don't know -- why can't you {0}?"
-          ],
-          r'I am (.*)': [
-              "Did you come to me because you are {0}?",
-              "How long have you been {0}?",
-              "How do you feel about being {0}?"
-          ],
-          r'.* mother .*': [
-              "Tell me more about your mother.",
-              "What was your relationship with your mother like?",
-              "How do you feel about your mother?"
-          ],
-          r'.* father .*': [
-              "Tell me more about your father.",
-              "How did your father make you feel?",
-              "What has your father taught you?"
-          ],
-          r'.* job .*': [
-              "Tell me more about your job.",
-              "How did your job make you feel?",
-              "What do your feel about your job?"
-          ],
-          r'.* study .*': [
-              "Tell me more about your study.",
-              "How did your study make you feel?",
-              "What has your study taught you?"
-          ],
-          r'.* hobby .*': [
-              "Tell me more about your hobby.",
-              "How did your hobby make you feel?",
-              "What has your hobby brought to you?"
-          ],
-          r'.*': [
-              "Please tell me more.",
-              "Let's change focus a bit... Tell me about your family.",
-              "Can you elaborate on that?"
-          ]
+      # ===========================
+      # 上下文记忆
+      # ===========================
+      memory = {
+          "name": None,
+          "age": None,
+          "job": None
       }
       
-      # 定义代词转换规则
-      pronoun_swap = {
-          "i": "you", "you": "i", "me": "you", "my": "your",
-          "am": "are", "are": "am", "was": "were", "i'd": "you would",
-          "i've": "you have", "i'll": "you will", "yours": "mine",
-          "mine": "yours"
-      }
+      # ===========================
+      # ELIZA规则
+      # ===========================
+      rules = [
       
-      def swap_pronouns(phrase):
-          """
-          对输入短语中的代词进行第一/第二人称转换
-          """
-          words = phrase.lower().split()
-          swapped_words = [pronoun_swap.get(word, word) for word in words]
-          return " ".join(swapped_words)
+          # 工作
+          (
+              r"I work as (.+)",
+              [
+                  "How do you feel about your work as {}?",
+                  "Why did you choose to become {}?",
+                  "Do you enjoy being a {}?"
+              ]
+          ),
       
-      def respond(user_input):
-          """
-          根据规则库生成响应
-          """
-          for pattern, responses in rules.items():
-              match = re.search(pattern, user_input, re.IGNORECASE)
+          # 学习
+          (
+              r"I study (.+)",
+              [
+                  "What do you enjoy most about studying {}?",
+                  "Is {} difficult for you?",
+                  "Why did you choose to study {}?"
+              ]
+          ),
+      
+          # 爱好
+          (
+              r"My hobby is (.+)",
+              [
+                  "Why do you enjoy {}?",
+                  "How long have you been interested in {}?",
+                  "What do you like most about {}?"
+              ]
+          ),
+      
+          # 喜欢
+          (
+              r"I like (.+)",
+              [
+                  "What makes you like {}?",
+                  "When did you start liking {}?",
+                  "Tell me more about why you like {}."
+              ]
+          ),
+      
+          # 疲劳
+          (
+              r"I am tired",
+              [
+                  "Have you been working too hard recently?",
+                  "Would taking a break help?",
+                  "What do you think is making you tired?"
+              ]
+          ),
+      
+          # 开心
+          (
+              r"I am happy",
+              [
+                  "That's wonderful! What made you happy?",
+                  "I'm glad to hear that.",
+                  "Can you tell me more about it?"
+              ]
+          ),
+      
+          # 难过
+          (
+              r"I am sad",
+              [
+                  "I'm sorry to hear that.",
+                  "Would you like to talk about it?",
+                  "What happened?"
+              ]
+          ),
+      
+          # 我觉得...
+          (
+              r"I think (.+)",
+              [
+                  "Why do you think {}?",
+                  "What makes you believe {}?",
+                  "Can you explain more about {}?"
+              ]
+          )
+      ]
+      
+      # ===========================
+      # 更新记忆
+      # ===========================
+      def update_memory(text):
+      
+          name = re.search(r"My name is (\w+)", text, re.IGNORECASE)
+          if name:
+              memory["name"] = name.group(1)
+      
+          age = re.search(r"I am (\d+) years old", text, re.IGNORECASE)
+          if age:
+              memory["age"] = age.group(1)
+      
+          job = re.search(r"I work as (.+)", text, re.IGNORECASE)
+          if job:
+              memory["job"] = job.group(1)
+      
+      # ===========================
+      # 代词转换
+      # ===========================
+      def transform_pronouns(text):
+      
+          replacements = {
+              " my ": " your ",
+              " My ": " Your ",
+              " i ": " you ",
+              " I ": " You ",
+              " me ": " you ",
+              " am ": " are "
+          }
+      
+          result = " " + text + " "
+      
+          for old, new in replacements.items():
+              result = result.replace(old, new)
+      
+          return result.strip()
+      
+      # ===========================
+      # 回答生成
+      # ===========================
+      def generate_response(user_input):
+      
+          update_memory(user_input)
+      
+          lower = user_input.lower()
+      
+          # ---------- 查询记忆 ----------
+          if "who am i" in lower:
+              if memory["name"]:
+                  return f"Your name is {memory['name']}."
+              return "I don't know your name yet."
+      
+          if "how old am i" in lower:
+              if memory["age"]:
+                  return f"You are {memory['age']} years old."
+              return "You haven't told me your age."
+      
+          if "what is my job" in lower:
+              if memory["job"]:
+                  return f"You work as {memory['job']}."
+              return "You haven't told me your job."
+      
+          # ---------- 规则匹配 ----------
+          for pattern, responses in rules:
+      
+              match = re.match(pattern, user_input, re.IGNORECASE)
+      
               if match:
-                  # 捕获匹配到的部分
-                  captured_group = match.group(1) if match.groups() else ''
-                  # 进行代词转换
-                  swapped_group = swap_pronouns(captured_group)
-                  # 从模板中随机选择一个并格式化
-                  response = random.choice(responses).format(swapped_group)
-                  return response
-          # 如果没有匹配任何特定规则，使用最后的通配符规则
-          return random.choice(rules[r'.*'])
       
-      # 主聊天循环
-      if __name__ == '__main__':
-          print("Therapist: Hello! How can I help you today?")
-          
+                  groups = list(match.groups())
+      
+                  # 做代词转换
+                  groups = [transform_pronouns(g) for g in groups]
+      
+                  response = random.choice(responses)
+      
+                  if groups:
+                      return response.format(*groups)
+                  else:
+                      return response
+      
+          # ---------- 默认回复 ----------
+          generic = [
+              "Please tell me more.",
+              "Can you explain that further?",
+              "Why do you say that?",
+              "How does that make you feel?",
+              "That's interesting. Go on.",
+              "Could you elaborate on that?"
+          ]
+      
+          return random.choice(generic)
+      
+      # ===========================
+      # 主程序
+      # ===========================
+      def main():
+      
+          print("=" * 50)
+          print("      ELIZA Chatbot (Enhanced Version)")
+          print("Type 'quit' to exit.")
+          print("=" * 50)
+      
           while True:
-              if name=='':
-                  print("Therapist: What's your name?")
-                  name=input("You: ")
-              if age=='':
-                  print("Therapist: How old are you?")
-                  age=input("You: ")
-              if job=='':
-                  print("Therapist: What's your job?")
-                  job=input("You: ")
-              user_input = input("You: ")
-              if user_input.lower() in ["quit", "exit", "bye"]:
-                  print("Therapist: Goodbye. It was nice talking to you.")
+      
+              user_input = input("\nYou: ")
+      
+              if user_input.lower() == "quit":
+                  print("ELIZA: Goodbye! Have a nice day.")
                   break
-              response = respond(user_input)
-              print(f"Therapist: {response}")
-              
-      >>>
-      Therapist: Hello! How can I help you today?
-      You: I am feeling sad today.
-      Therapist: How long have you been feeling sad today?
-      You: I need some help with my project.
-      Therapist: Are you sure you need some help with your project?
-      You: My mother is not happy with my work.
-      Therapist: Tell me more about your mother.
-      You: quit
-      Therapist: Goodbye. It was nice talking to you.
+      
+              response = generate_response(user_input)
+      
+              print("ELIZA:", response)
+      
+      
+      # ===========================
+      # 运行
+      # ===========================
+      if __name__ == "__main__":
+          main()
 
 
      ```
+
+     - 虽然扩展后的 ELIZA 增加了工作、学习、爱好等规则，并实现了简单的上下文记忆，但它与 ChatGPT 在底层原理和能力上仍存在本质区别。
+     - | 对比维度       | 扩展后的 ELIZA                     | ChatGPT                                         |
+        | ---------- | ------------------------------ | ----------------------------------------------- |
+        | **实现原理**   | 基于人工编写的规则和模板匹配，通过关键词匹配生成固定回复。  | 基于 Transformer 大语言模型，通过海量数据训练学习语言规律，利用神经网络生成回答。 |
+        | **知识来源**   | 知识全部来自程序员编写的规则，知识范围有限。         | 知识来源于大规模训练数据，并可结合检索增强（RAG）等技术获取最新知识。            |
+        | **语义理解能力** | 只能识别预设关键词，无法真正理解用户意图和语义。       | 能够理解上下文语义、隐含含义和复杂表达，具有较强的语言理解能力。                |
+        | **上下文能力**  | 只能记住少量固定信息（如姓名、年龄、职业），上下文能力有限。 | 能够综合多轮对话内容进行连续推理，保持较好的上下文一致性。                   |
+        | **泛化能力**   | 对未编写规则的问题通常无法回答，只能返回默认回复。      | 能处理大量未见过的新问题，具有较强的泛化能力。                         |
+        | **学习能力**   | 不具备自主学习能力，新增知识需要人工修改规则。        | 模型通过训练学习知识，虽然不会在聊天过程中即时学习，但整体具有较强的学习和泛化能力。      |
+        | **推理能力**   | 基本没有真正推理能力，仅执行规则匹配。            | 能完成逻辑推理、数学计算、代码生成、文本创作等复杂任务。                    |
+
