@@ -172,7 +172,7 @@ class DecoderLayer(nn.Module):
         return x
 ```
 
-- 编码器层 EncoderLayer 完整维度流
+### 编码器层 EncoderLayer 完整维度流
 | 步骤序号 | 操作名称 | 对应代码位置 | 张量形状 | 核心说明 |
 |----------|----------|--------------|-----------|----------|
 | 1 | 层输入 | `forward(x, mask)` 入参 | `(2, 10, 512)` | 经过词嵌入（Embedding）和位置编码（Positional Encoding）后的编码器输入。 |
@@ -185,7 +185,7 @@ class DecoderLayer(nn.Module):
 | 8 | 第二次残差连接 + Dropout | `x + self.dropout(ff_output)` | `(2, 10, 512)` | 将前馈网络输出与输入逐元素相加，并进行 Dropout，张量形状保持不变。 |
 | 9 | 第二层归一化 + 层输出 | `self.norm2(...)` | `(2, 10, 512)` | 对结果进行第二次 Layer Normalization，得到单层编码器最终输出，其形状与输入完全一致，可继续堆叠后续 Encoder Layer。 |
 
-- 解码器层 DecoderLayer 完整维度流
+### 解码器层 DecoderLayer 完整维度流
 | 步骤序号 | 操作名称 | 对应代码位置 | 张量形状 | 核心说明 |
 |----------|----------|--------------|-----------|----------|
 | 1 | 层输入 | `forward(x, encoder_output, src_mask, tgt_mask)` | `x: (2, 8, 512)`<br>`encoder_output: (2, 10, 512)` | `x` 为目标端词嵌入（Embedding）与位置编码（Positional Encoding）后的输入；`encoder_output` 为编码器最终输出。 |
