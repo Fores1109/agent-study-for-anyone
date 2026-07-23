@@ -125,8 +125,8 @@ class PositionWiseFeedForward(nn.Module):
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout):
         super(EncoderLayer, self).__init__()
-        self.self_attn = MultiHeadAttention(d_model, num_heads) # 待实现
-        self.feed_forward = PositionWiseFeedForward(d_model, d_ff, dropout) # 待实现
+        self.self_attn = MultiHeadAttention(d_model, num_heads) 
+        self.feed_forward = PositionWiseFeedForward(d_model, d_ff, dropout) 
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
@@ -148,9 +148,9 @@ class EncoderLayer(nn.Module):
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout):
         super(DecoderLayer, self).__init__()
-        self.self_attn = MultiHeadAttention(d_model, num_heads) # 待实现
-        self.cross_attn = MultiHeadAttention(d_model, num_heads) # 待实现
-        self.feed_forward = PositionWiseFeedForward(d_model, d_ff, dropout) # 待实现
+        self.self_attn = MultiHeadAttention(d_model, num_heads) 
+        self.cross_attn = MultiHeadAttention(d_model, num_heads) 
+        self.feed_forward = PositionWiseFeedForward(d_model, d_ff, dropout) 
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.norm3 = nn.LayerNorm(d_model)
@@ -171,6 +171,35 @@ class DecoderLayer(nn.Module):
 
         return x
 ```
+
+- 编码器层 EncoderLayer 完整维度流
+| 步骤序号 | 操作名称 | 对应代码位置 | 张量形状 | 核心说明 |
+|----------|----------|--------------|-----------|----------|
+| 1 | 层输入 | `forward(x, mask)` 入参 | `(2, 10, 512)` | 经过词嵌入（Embedding）和位置编码（Positional Encoding）后的编码器输入。 |
+| 2 | 多头自注意力计算 | `self.self_attn(x, x, x, mask)` | `(2, 10, 512)` | Q、K、V 均来自输入 `x`，经过多头自注意力计算后输出维度与输入保持一致。 |
+| 3 | 残差连接 + Dropout | `x + self.dropout(attn_output)` | `(2, 10, 512)` | 将注意力输出与原输入逐元素相加，并进行 Dropout，张量形状保持不变。 |
+| 4 | 第一层归一化 | `self.norm1(...)` | `(2, 10, 512)` | 使用 Layer Normalization 沿最后一维进行归一化，仅改变数值分布，不改变张量形状。 |
+| 5 | 前馈网络 - 升维线性层 | `self.feed_forward.linear1(x)` | `(2, 10, 2048)` | 第一个全连接层，将特征维度从 `d_model=512` 升维至 `d_ff=2048`。 |
+| 6 | 激活 + Dropout | `ReLU + Dropout` | `(2, 10, 2048)` | 对升维后的特征进行 ReLU 激活，并执行 Dropout，张量形状保持不变。 |
+| 7 | 前馈网络 - 降维线性层 | `self.feed_forward.linear2(x)` | `(2, 10, 512)` | 第二个全连接层，将特征维度从 `d_ff=2048` 降维回 `d_model=512`。 |
+| 8 | 第二次残差连接 + Dropout | `x + self.dropout(ff_output)` | `(2, 10, 512)` | 将前馈网络输出与输入逐元素相加，并进行 Dropout，张量形状保持不变。 |
+| 9 | 第二层归一化 + 层输出 | `self.norm2(...)` | `(2, 10, 512)` | 对结果进行第二次 Layer Normalization，得到单层编码器最终输出，其形状与输入完全一致，可继续堆叠后续 Encoder Layer。 |
+
+- 解码器层 DecoderLayer 完整维度流
+| 步骤序号 | 操作名称 | 对应代码位置 | 张量形状 | 核心说明 |
+|----------|----------|--------------|-----------|----------|
+| 1 | 层输入 | `forward(x, encoder_output, src_mask, tgt_mask)` | `x: (2, 8, 512)`<br>`encoder_output: (2, 10, 512)` | `x` 为目标端词嵌入（Embedding）与位置编码（Positional Encoding）后的输入；`encoder_output` 为编码器最终输出。 |
+| 2 | 掩码多头自注意力 | `self.self_attn(x, x, x, tgt_mask)` | `(2, 8, 512)` | Q、K、V 均来自解码器输入 `x`，使用因果掩码（Causal Mask），保证当前位置只能关注当前位置及之前的 Token，输出序列长度保持 `tgt_seq_len=8`。 |
+| 3 | 第一次残差连接 + Dropout | `x + self.dropout(attn_output)` | `(2, 8, 512)` | 将掩码自注意力输出与输入逐元素相加，并进行 Dropout，张量形状保持不变。 |
+| 4 | 第一层归一化 | `self.norm1(...)` | `(2, 8, 512)` | 使用 Layer Normalization 沿最后一维进行归一化，仅改变数值分布，不改变张量形状。 |
+| 5 | 交叉注意力计算 | `self.cross_attn(x, encoder_output, encoder_output, src_mask)` | `(2, 8, 512)` | Query（Q）来自解码器输出，Key（K）和 Value（V）来自编码器输出，输出序列长度由 Query 决定，因此保持目标端长度 `8`。 |
+| 6 | 第二次残差连接 + Dropout | `x + self.dropout(cross_attn_output)` | `(2, 8, 512)` | 将交叉注意力输出与输入逐元素相加，并进行 Dropout，张量形状保持不变。 |
+| 7 | 第二层归一化 | `self.norm2(...)` | `(2, 8, 512)` | 使用第二次 Layer Normalization，对特征进行归一化处理，不改变张量形状。 |
+| 8 | 前馈网络 - 升维线性层 | `self.feed_forward.linear1(x)` | `(2, 8, 2048)` | 前馈网络第一层全连接，将特征维度从 `d_model=512` 升维到 `d_ff=2048`。 |
+| 9 | 激活 + Dropout | `ReLU + Dropout` | `(2, 8, 2048)` | 对升维后的特征进行 ReLU 激活，并执行 Dropout，张量形状保持不变。 |
+| 10 | 前馈网络 - 降维线性层 | `self.feed_forward.linear2(x)` | `(2, 8, 512)` | 前馈网络第二层全连接，将特征维度从 `d_ff=2048` 降维回 `d_model=512`。 |
+| 11 | 第三次残差连接 + Dropout | `x + self.dropout(ff_output)` | `(2, 8, 512)` | 将前馈网络输出与输入逐元素相加，并进行 Dropout，张量形状保持不变。 |
+| 12 | 第三层归一化 + 层输出 | `self.norm3(...)` | `(2, 8, 512)` | 使用第三次 Layer Normalization，得到单层解码器最终输出，其形状与解码器输入保持一致，可继续堆叠后续 Decoder Layer。 |
 
 
 
